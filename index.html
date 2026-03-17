@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Treino de Números em Japonês</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* --- estilos originais (sem mudanças) --- */
+    #options button{transition:background .4s,color .4s;background:#a78bfa;color:#fff;font-weight:600;border-radius:.5rem;border:none;cursor:pointer}
+    #options button:hover{background:linear-gradient(to right,#c084fc,#a78bfa)}
+    #options button:focus{outline:3px solid #fbbf24}
+    /* Novo estilo para botões desabilitados */
+    #options button:disabled{opacity: 0.6; cursor: not-allowed;} 
+
+    #lang-toggle,#dark-toggle{cursor:pointer;padding:6px 12px;border-radius:8px;font-weight:600;transition:.3s;background:#a78bfa;color:#fff;border:none;position:fixed;top:12px;z-index:1000}
+    #lang-toggle{right:12px}
+    #lang-toggle:hover{background:#7c3aed}
+    #dark-toggle{left:12px;background:#f97316}
+    #dark-toggle:hover{background:#ea580c}
+    body.dark{background:#121212;color:#ccc}
+    body.dark #app{background:#1e1e1e;color:#ccc;box-shadow:none}
+    body.dark .bg-gray-200{background:#2a2a2a !important;color:#ddd !important}
+    body.dark #translation,body.dark #jp-number{color:#fbbf24}
+    body.dark #options button{background:rgba(249,115,22,.85)!important}
+    body.dark #options button:hover{background:linear-gradient(to right,rgba(249,115,22,1),rgba(234,88,12,1))!important}
+    /* Estilo para desabilitado no modo noturno */
+    body.dark #options button:disabled{background:rgba(249,115,22,.5)!important;} 
+
+    #fireworks-canvas{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2000}
+    #volume-container{position:fixed;bottom:12px;right:12px;z-index:1000;background:rgba(255,255,255,.8);padding:10px 15px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);display:flex;align-items:center;gap:10px}
+    body.dark #volume-container{background:rgba(44,44,44,.9);box-shadow:0 2px 10px rgba(0,0,0,.3)}
+    #volume-slider{width:120px;-webkit-appearance:none;height:8px;background:#ddd;border-radius:4px;transition:background .2s}
+    body.dark #volume-slider{background:#555}
+    #volume-slider::-webkit-slider-thumb,#volume-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#a78bfa;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,.2)}
+    body.dark #volume-slider::-webkit-slider-thumb,body.dark #volume-slider::-moz-range-thumb{background:#fbbf24}
+    #mode{background:rgba(167,139,250,.15);color:#2c2c2c;border:1px solid #a78bfa;font-weight:600;padding:.5rem .75rem;border-radius:.375rem;width:100%;cursor:pointer}
+    body.dark #mode{background:rgba(255,255,255,.05);color:#e0e0e0;border-color:#444}
+    #mode option{background:#fff;color:#000}
+    body.dark #mode option{background:#1e1e1e;color:#ddd}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-100 flex items-center justify-center p-4 relative">
+
+  <button id="dark-toggle">Modo Noturno</button>
+  <button id="lang-toggle">English</button>
+
+  <div id="app" class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-md">
+    <div class="flex justify-between mb-2">
+      <div id="hint-symbol" class="text-xl">☥</div>
+      <div id="score" class="text-sm font-semibold">Pontuação: <strong>0/0</strong></div>
+    </div>
+
+    <div class="bg-gray-200 rounded-xl p-6 text-center mb-4">
+      <div id="translation" class="text-lg font-semibold text-gray-700 mb-2"></div>
+      <div id="jp-number" class="text-6xl font-black">?</div>
+    </div>
+
+    <div id="options" class="grid grid-cols-2 gap-2 mb-4"></div>
+    <p id="feedback" class="text-center text-lg font-medium"></p>
+
+    <div class="mt-6">
+      <label class="block mb-1 font-semibold" for="mode">Modo:</label>
+      <select id="mode">
+        <option value="kanji">Contagem com Kanji (三つ)</option>
+        <option value="normal">Numeral Normal (いち, に, さん)</option>
+        <option value="ambos">Misto</option>
+        <option value="dias">Dias da Semana</option>
+        <option value="dias-do-mes">Dias do Mês</option>
+        <option value="horas">Horas do Dia</option>
+      </select>
+
+      <div id="range-container" class="mt-4">
+        <label class="block mb-1 font-semibold" for="range-slider">Intervalo:</label>
+        <input type="range" id="range-slider" min="10" max="200" step="10" value="10" class="w-full p-2 border rounded-md" />
+        <div id="range-value" class="text-center mt-2 font-medium">1 - 10</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="volume-container">
+    <label id="volume-label" for="volume-slider">Volume:</label>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.5" />
+  </div>
+
+  <audio id="sound-correct" src="assets/correto-2.mp3" preload="auto"></audio>
+  <audio id="sound-wrong" src="assets/erro.mp3" preload="auto"></audio>
+
+  <canvas id="fireworks-canvas"></canvas>
+
+  <script>
+    /* ------------------ TEXTOS ------------------ */
+    const texts = {
+      pt: {
+        title: "Treino de Números em Japonês",
+        score: "Pontuação",
+        correct: "✅ Correto!",
+        wrong: "❌ Errado! Correto:",
+        modeLabel: "Modo:",
+        modeOptions: [
+          "Contagem com Kanji (三つ)",
+          "Numeral Normal (いち, に, さん)",
+          "Misto",
+          "Dias da Semana",
+          "Dias do Mês",
+          "Horas do Dia" // Nova opção
+        ],
+        rangeLabel: "Intervalo:",
+        langToggle: "English",
+        darkToggle: "Modo Noturno",
+        darkToggleActive: "Modo Claro",
+        volumeLabel: "Volume:"
+      },
+      en: {
+        title: "Japanese Numbers Training",
+        score: "Score",
+        correct: "✅ Correct!",
+        wrong: "❌ Wrong! Correct:",
+        modeLabel: "Mode:",
+        modeOptions: [
+          "Counting with Kanji (三つ)",
+          "Normal Numeral (ichi, ni, san)",
+          "Mixed",
+          "Weekdays",
+          "Days of the Month",
+          "Hours of the Day" // Nova opção
+        ],
+        rangeLabel: "Range:",
+        langToggle: "Português",
+        darkToggle: "Dark Mode",
+        darkToggleActive: "Light Mode",
+        volumeLabel: "Volume:"
+      }
+    };
+
+    /* ---------- NÚMEROS 1‑10 ---------- */
+    const baseNumbers = [
+      ["一", "いち"], ["二", "に"], ["三", "さん"], ["四", "よん"], ["五", "ご"],
+      ["六", "ろく"], ["七", "なな"], ["八", "はち"], ["九", "きゅう"], ["十", "じゅう"]
+    ];
+
+    /* ---------- NÚMEROS 1‑200 (modo normal) ---------- */
+    function buildNumbersUpTo200() {
+      const nums = [];
+      for (let i = 1; i <= 200; i++) {
+        let jp = "", hira = "";
+
+        if (i === 200) {
+          jp = "二百"; hira = "にひゃく";
+        } else if (i === 100) {
+          jp = "百"; hira = "ひゃく";
+        } else if (i > 100) {
+          const r = i - 100;
+          jp = "百"; hira = "ひゃく";
+          addBelow100(r);
+        } else addBelow100(i);
+
+        function addBelow100(n) {
+          if (n > 10 && n < 20) {
+            jp += "十" + (n % 10 ? baseNumbers[n % 10 - 1][0] : "");
+            hira += "じゅう" + (n % 10 ? baseNumbers[n % 10 - 1][1] : "");
+          } else if (n >= 20) {
+            const d = Math.floor(n / 10), u = n % 10;
+            jp += baseNumbers[d - 1][0] + "十" + (u ? baseNumbers[u - 1][0] : "");
+            hira += baseNumbers[d - 1][1] + "じゅう" + (u ? baseNumbers[u - 1][1] : "");
+          } else if (n === 10) {
+            jp += "十"; hira += "じゅう";
+          } else if (n > 0) {
+            jp += baseNumbers[n - 1][0]; hira += baseNumbers[n - 1][1];
+          }
+        }
+        nums.push({ jp, hira, num: i });
+      }
+      return nums;
+    }
+    const extendedNumbers = buildNumbersUpTo200();
+
+    /* ---------- CONTADOR KANJI (一つ…) ---------- */
+    const dataKanji = [
+      { jp: "一つ", hira: "ひとつ", num: 1 },
+      { jp: "二つ", hira: "ふたつ", num: 2 },
+      { jp: "三つ", hira: "みっつ", num: 3 },
+      { jp: "四つ", hira: "よっつ", num: 4 },
+      { jp: "五つ", hira: "いつつ", num: 5 },
+      { jp: "六つ", hira: "むっつ", num: 6 },
+      { jp: "七つ", hira: "ななつ", num: 7 },
+      { jp: "八つ", hira: "やっつ", num: 8 },
+      { jp: "九つ", hira: "ここのつ", num: 9 },
+      { jp: "十", hira: "とお", num: 10 }
+    ];
+
+    /* ---------- DIAS DA SEMANA ---------- */
+    const daysOfWeek = [
+      { jp: "日曜日", hira: "にちようび", num: "Domingo" },
+      { jp: "月曜日", hira: "げつようび", num: "Segunda" },
+      { jp: "火曜日", hira: "かようび", num: "Terça" },
+      { jp: "水曜日", hira: "すいようび", num: "Quarta" },
+      { jp: "木曜日", hira: "もくようび", num: "Quinta" },
+      { jp: "金曜日", hira: "きんようび", num: "Sexta" },
+      { jp: "土曜日", hira: "どようび", num: "Sábado" }
+    ];
+
+    /* ---------- DIAS DO MÊS 1‑31 ---------- */
+    const daysOfMonth = [];
+    for (let d = 1; d <= 31; d++) {
+      const jpKanji = extendedNumbers.find(e => e.num === d)?.jp || d.toString();
+      const jpDay = jpKanji + "日";
+	const special = {
+  1:"ついたち",2:"ふつか",3:"みっか",4:"よっか",5:"いつか",6:"むいか",7:"なのか",8:"ようか",
+  9:"ここのか",10:"とおか",14:"じゅうよっか",17:"じゅうしちにち",19:"じゅうくにち",20:"はつか",24:"にじゅうよっか"
+};
+
+      const hiraDay = special[d] || (extendedNumbers.find(e=>e.num===d)?.hira + "にち");
+      const ptLabel = `dia ${d}º`;
+      const enLabel = `${d}${ordinalSuffixEN(d)} day`;
+      daysOfMonth.push({
+        jp: jpDay,
+        hira: hiraDay,
+        num: { pt: ptLabel, en: enLabel }
+      });
+    }
+    function ordinalSuffixEN(n){
+      const v = n % 100;
+      if (v >= 11 && v <= 13) return "th";
+      switch (v % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+      }
+    }
+
+    /* ---------- HORAS DO DIA ---------- */
+    const hoursOfDay = [
+      { jp: "一時", hira: "いちじ", num: "1:00" },
+      { jp: "二時", hira: "にじ", num: "2:00" },
+      { jp: "三時", hira: "さんじ", num: "3:00" },
+      { jp: "四時", hira: "よじ", num: "4:00" },
+      { jp: "五時", hira: "ごじ", num: "5:00" },
+      { jp: "六時", hira: "ろくじ", num: "6:00" },
+      { jp: "七時", hira: "しちじ", num: "7:00" },
+      { jp: "八時", hira: "はちじ", num: "8:00" },
+      { jp: "九時", hira: "くじ", num: "9:00" },
+      { jp: "十時", hira: "じゅうじ", num: "10:00" },
+      { jp: "十一時", hira: "じゅういちじ", num: "11:00" },
+      { jp: "十二時", hira: "じゅうにじ", num: "12:00" },
+      { jp: "一時半", hira: "いちじはん", num: "1:30" },
+      { jp: "二時半", hira: "にじはん", num: "2:30" },
+      { jp: "三時半", hira: "さんじはん", num: "3:30" },
+      { jp: "四時半", hira: "よじはん", num: "4:30" },
+      { jp: "五時半", hira: "ごじはん", num: "5:30" },
+      { jp: "六時半", hira: "ろくじはん", num: "6:30" },
+      { jp: "七時半", hira: "しちじはん", num: "7:30" },
+      { jp: "八時半", hira: "はちじはん", num: "8:30" },
+      { jp: "九時半", hira: "くじはん", num: "9:30" },
+      { jp: "十時半", hira: "じゅうじはん", num: "10:30" },
+      { jp: "十一時半", hira: "じゅういちじはん", num: "11:30" },
+      { jp: "十二時半", hira: "じゅうにじはん", num: "12:30" }
+    ];
+
+    /* ---------- DOM ELEMENTS ---------- */
+    const translationEl = document.getElementById("translation");
+    const jpNumberEl     = document.getElementById("jp-number");
+    const optionsEl      = document.getElementById("options");
+    const feedbackEl     = document.getElementById("feedback");
+    const scoreEl        = document.getElementById("score");
+    const modeSelect     = document.getElementById("mode");
+    const rangeContainer = document.getElementById("range-container");
+    const rangeSlider    = document.getElementById("range-slider");
+    const rangeValue     = document.getElementById("range-value");
+    const langToggle     = document.getElementById("lang-toggle");
+    const darkToggle     = document.getElementById("dark-toggle");
+    const volumeSlider   = document.getElementById("volume-slider");
+    const soundCorrect   = document.getElementById("sound-correct");
+    const soundWrong     = document.getElementById("sound-wrong");
+
+    /* ---------- ESTADO ---------- */
+    let currentLang = "pt";
+    let currentMode = "kanji";
+    let currentNumber = null;
+    let score = 0, totalQuestions = 0;
+    let volume = 0.5, maxRange = 10;
+
+    /* ---------- NÃO REPETIR PERGUNTAS ---------- */
+    let questionPool = [];
+    let usedIndex = 0;
+    let lastPoolKey = "";
+
+    function shuffle(array){
+      for(let i=array.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [array[i],array[j]]=[array[j],array[i]];
+      }
+      return array;
+    }
+
+    function buildPool(){
+      if(currentMode==="kanji") return [...dataKanji];
+      if(currentMode==="normal") return extendedNumbers.filter(e=>e.num<=maxRange);
+      if(currentMode==="ambos") return [...dataKanji,...extendedNumbers.filter(e=>e.num<=maxRange)];
+      if(currentMode==="dias") return [...daysOfWeek];
+      if(currentMode==="dias-do-mes") return [...daysOfMonth];
+      if(currentMode==="horas") return [...hoursOfDay]; // Adicionado modo de horas
+      return []; // fallback
+    }
+
+    function selectNext(){
+      // A chave agora considera também o modo para reconstruir o pool
+      const key=currentMode+(currentMode==="normal"||currentMode==="ambos"?`-${maxRange}`:"");
+      if(key!==lastPoolKey||questionPool.length===0){
+        questionPool=shuffle(buildPool());
+        usedIndex=0;
+        lastPoolKey=key;
+      }
+      if(usedIndex>=questionPool.length){
+        questionPool=shuffle(buildPool());
+        usedIndex=0;
+      }
+      return questionPool[usedIndex++];
+    }
+
+    /* ---------- UI ---------- */
+    function translateUI(){
+      document.title=texts[currentLang].title;
+      scoreEl.innerHTML=`${texts[currentLang].score}: <strong>${score}/${totalQuestions}</strong>`;
+      // Garante que todas as opções sejam atualizadas, incluindo a nova
+      texts[currentLang].modeOptions.forEach((t,i)=> {
+        if (modeSelect.options[i]) { // Verifica se a opção existe
+            modeSelect.options[i].text=t;
+        }
+      });
+      document.querySelector("label[for='mode']").textContent=texts[currentLang].modeLabel;
+      document.querySelector("label[for='range-slider']").textContent=texts[currentLang].rangeLabel;
+      langToggle.textContent=texts[currentLang].langToggle;
+      darkToggle.textContent=document.body.classList.contains("dark")?texts[currentLang].darkToggleActive:texts[currentLang].darkToggle;
+      document.getElementById("volume-label").textContent=texts[currentLang].volumeLabel;
+      rangeValue.textContent=`1 - ${maxRange}`;
+    }
+
+    /* ---------- GERAÇÃO DE ALTERNATIVAS ---------- */
+    function sameBandOptions(correct){
+      let bandMin=1,bandMax=10;
+      if(correct.num>=11&&correct.num<=99){bandMin=10;bandMax=99;}
+      else if(correct.num>=100){bandMin=100;bandMax=200;}
+      return extendedNumbers
+        .filter(e=>e.num>=bandMin && e.num<=bandMax && e.hira!==correct.hira)
+        .map(e=>e.hira);
+    }
+
+    function displayQuestion(){
+      currentNumber=selectNext();
+      totalQuestions++;
+      scoreEl.innerHTML=`${texts[currentLang].score}: <strong>${score}/${totalQuestions-1}</strong>`;
+      feedbackEl.textContent="";
+
+      let optsPool=[];
+      if(currentMode==="kanji"){
+        translationEl.textContent=currentNumber.num.toString();
+        jpNumberEl.textContent=currentNumber.jp;
+        optsPool=dataKanji.filter(e=>e.hira!==currentNumber.hira).map(e=>e.hira);
+      }else if(currentMode==="normal"){
+        translationEl.textContent=currentNumber.num.toString();
+        jpNumberEl.textContent=currentNumber.jp;
+        optsPool=sameBandOptions(currentNumber);
+      }else if(currentMode==="ambos"){
+        translationEl.textContent=currentNumber.num.toString();
+        jpNumberEl.textContent=currentNumber.jp||currentNumber.hira;
+        if(currentNumber.num<=10){
+          optsPool=dataKanji.filter(e=>e.hira!==currentNumber.hira).map(e=>e.hira);
+        }else{
+          optsPool=sameBandOptions(currentNumber);
+        }
+      }else if(currentMode==="dias"){
+        translationEl.textContent=currentNumber.num;
+        jpNumberEl.textContent=currentNumber.jp;
+        optsPool=daysOfWeek.filter(e=>e.hira!==currentNumber.hira).map(e=>e.hira);
+      }else if(currentMode==="dias-do-mes"){
+        translationEl.textContent=currentNumber.num[currentLang];
+        jpNumberEl.textContent=currentNumber.jp;
+        optsPool=daysOfMonth.filter(e=>e.hira!==currentNumber.hira).map(e=>e.hira);
+      } else if (currentMode === "horas") { // Novo modo de horas
+        translationEl.textContent = currentNumber.num;
+        jpNumberEl.textContent = currentNumber.jp;
+        optsPool = hoursOfDay.filter(e => e.hira !== currentNumber.hira).map(e => e.hira);
+      }
+
+      const options=getOptions(currentNumber.hira,optsPool);
+      renderOptions(options,currentNumber.hira);
+    }
+
+    function getOptions(correct, pool, n=4){
+      const set=new Set([correct]);
+      // Cria uma cópia do pool para manipular sem afetar o original
+      let tempPool = [...pool]; 
+      while(set.size < n && tempPool.length > 0){
+        // Pega uma opção aleatória do pool temporário e a remove
+        const randomIndex = Math.floor(Math.random() * tempPool.length);
+        const optionToAdd = tempPool.splice(randomIndex, 1)[0]; 
+        set.add(optionToAdd);
+      }
+      // Se ainda não tiver N opções (ex: 4), e o pool original permitir, adiciona mais
+      // Isso pode acontecer se o tempPool ficar vazio antes de atingir N opções
+      while (set.size < n) {
+          const opt = pool[Math.floor(Math.random() * pool.length)]; // Pega do pool original
+          set.add(opt);
+      }
+      return Array.from(set).sort(()=>Math.random()-0.5);
+    }
+
+    // Função para desabilitar todos os botões de opção
+    function disableOptions() {
+        Array.from(optionsEl.children).forEach(button => {
+            button.disabled = true;
+        });
+    }
+
+    // Função para habilitar todos os botões de opção
+    function enableOptions() {
+        Array.from(optionsEl.children).forEach(button => {
+            button.disabled = false;
+        });
+    }
+
+    function renderOptions(list, correct){
+      optionsEl.innerHTML="";
+      list.forEach(txt=>{
+        const b=document.createElement("button");
+        b.textContent=txt;
+        b.type="button";
+        b.onclick=()=>{
+          disableOptions(); // Desabilita os botões imediatamente após o clique
+          if(txt===correct){
+            score++; feedbackEl.textContent=texts[currentLang].correct; play("correct");
+          }else{
+            feedbackEl.textContent=`${texts[currentLang].wrong} ${correct}`; play("wrong");
+          }
+          scoreEl.innerHTML=`${texts[currentLang].score}: <strong>${score}/${totalQuestions}</strong>`;
+          
+          // Adiciona o delay aqui
+          setTimeout(() => {
+            displayQuestion();
+            enableOptions(); // Habilita os botões novamente após a nova pergunta ser exibida
+          }, 1200); // Delay de 1.2 segundos
+        };
+        optionsEl.appendChild(b);
+      });
+      enableOptions(); // Garante que os botões estejam habilitados quando a pergunta é exibida pela primeira vez
+    }
+
+    function play(type){
+      const snd=type==="correct"?soundCorrect:soundWrong;
+      snd.volume=volume;
+      snd.currentTime=0;
+      snd.play();
+
+      if(type==="correct"&&document.body.classList.contains("dark")){
+        // Lança fogos de artifício ao acertar no modo noturno
+        for(let i=0;i<6;i++){
+          const x=innerWidth/2+(Math.random()-0.5)*300;
+          const y=innerHeight/2+(Math.random()-0.5)*300;
+          fireworks.push(new Firework(x,y));
+        }
+      }
+    }
+
+    /* ---------- EVENTOS ---------- */
+    modeSelect.onchange=()=>{
+      currentMode=modeSelect.value;
+      score=totalQuestions=0;
+      translateUI();
+      // Atualiza a visibilidade do range container
+      rangeContainer.style.display=(currentMode==="normal"||currentMode==="ambos")?"block":"none";
+      initAndDisplay(); // Inicializa e exibe a nova pergunta
+    };
+
+    rangeSlider.oninput=()=>{
+      maxRange=parseInt(rangeSlider.value);
+      rangeValue.textContent=`1 - ${maxRange}`;
+      score=totalQuestions=0;
+      initAndDisplay(); // Inicializa e exibe a nova pergunta
+    };
+
+    langToggle.onclick=()=>{
+      currentLang=currentLang==="pt"?"en":"pt";
+      translateUI();
+      initAndDisplay(); // Inicializa e exibe a nova pergunta
+    };
+
+    darkToggle.onclick=()=>{
+      document.body.classList.toggle("dark");
+      translateUI();
+    };
+
+    volumeSlider.oninput=()=>{volume=parseFloat(volumeSlider.value);};
+
+    // Função para encapsular a inicialização da pool e exibição da pergunta
+    function initAndDisplay() {
+        questionPool = []; // Limpa a pool para forçar a reconstrução
+        usedIndex = 0;
+        lastPoolKey = ""; // Reseta a chave para garantir nova pool
+        displayQuestion();
+    }
+
+
+    /* ---------- FOGOS ---------- */
+    const canvas=document.getElementById("fireworks-canvas"),ctx=canvas.getContext("2d");
+    window.onresize=()=>{canvas.width=innerWidth;canvas.height=innerHeight};
+    window.onresize();
+    let fireworks=[];
+
+    class Particle {
+        constructor(x, y, angle, speed, radius, alpha, decay, color) {
+            this.x = x;
+            this.y = y;
+            this.angle = angle;
+            this.speed = speed;
+            this.radius = radius;
+            this.alpha = alpha;
+            this.decay = decay;
+            this.color = color;
+        }
+
+        update() {
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed;
+            this.speed *= 0.95; // Desacelera a partícula
+            this.alpha -= this.decay; // Faz a partícula desaparecer
+            return this.alpha > 0;
+        }
+
+        draw(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+            // Convert HSL to RGBA for drawing
+            const [r, g, b] = hslToRgb(this.color);
+            ctx.fillStyle = `rgba(${r},${g},${b},${this.alpha})`;
+            ctx.fill();
+        }
+    }
+
+    class Firework {
+      constructor(x, y){
+        this.particles = [];
+        const numParticles = 40;
+        for(let i=0; i < numParticles; i++){
+          const angle = Math.random() * 2 * Math.PI;
+          const speed = Math.random() * 5 + 2;
+          const radius = Math.random() * 2 + 1;
+          const alpha = 1;
+          const decay = 0.02 + Math.random() * 0.03;
+          const color = `hsl(${Math.random() * 360}, 100%, 70%)`; // Cores variadas
+          this.particles.push(new Particle(x, y, angle, speed, radius, alpha, decay, color));
+        }
+      }
+
+      update(){
+        this.particles = this.particles.filter(p => p.update());
+        return this.particles.length > 0;
+      }
+
+      draw(ctx){
+        this.particles.forEach(p => p.draw(ctx));
+      }
+    }
+
+    // Função para converter HSL para RGB - ESSENCIAL PARA AS CORES FUNCIONAREM
+    function hslToRgb(hslString) {
+        const matches = hslString.match(/(\d+(\.\d+)?)/g);
+        if (!matches || matches.length < 3) return [255, 255, 255]; // Fallback white
+        
+        let h = parseFloat(matches[0]);
+        let s = parseFloat(matches[1]) / 100;
+        let l = parseFloat(matches[2]) / 100;
+
+        let c = (1 - Math.abs(2 * l - 1)) * s;
+        let x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        let m = l - c / 2;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        if (0 <= h && h < 60) {
+            r = c; g = x; b = 0;
+        } else if (60 <= h && h < 120) {
+            r = x; g = c; b = 0;
+        } else if (120 <= h && h < 180) {
+            r = 0; g = c; b = x;
+        } else if (180 <= h && h < 240) {
+            r = 0; g = x; b = c;
+        } else if (240 <= h && h < 300) {
+            r = x; g = 0; b = c;
+        } else if (300 <= h && h < 360) {
+            r = c; g = 0; b = x;
+        }
+        r = Math.round((r + m) * 255);
+        g = Math.round((g + m) * 255);
+        b = Math.round((b + m) * 255);
+
+        return [r, g, b];
+    }
+
+    function loop(){
+      ctx.clearRect(0,0,canvas.width,canvas.height); // Limpa o canvas
+      fireworks = fireworks.filter(f => f.update()); // Atualiza e remove fogos "mortos"
+      fireworks.forEach(f => f.draw(ctx)); // Desenha os fogos restantes
+      requestAnimationFrame(loop); // Continua o loop
+    }
+    loop(); // Inicia o loop da animação
+  </script>
+</body>
+</html>
